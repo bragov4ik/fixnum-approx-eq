@@ -10,7 +10,7 @@ fixnum = "0.9.2"
 thiserror = "1.0.56"
 
 [dev-dependencies]
-fixnum = {version = "0.9.2", features = ["default", "i128", "i16"]}
+fixnum = {version = "0.9.2", features = ["default", "i128", "i32", "i64", "i16"]}
 
 [features]
 default = ["i128"]
