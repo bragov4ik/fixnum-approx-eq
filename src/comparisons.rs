@@ -57,9 +57,9 @@ where
     }
 
     let magnitude = a
-        .abs()
+        .trait_abs()
         .unwrap_or(FixedPoint::<I, P>::MAX)
-        .saturating_add(b.abs().unwrap_or(FixedPoint::<I, P>::MAX));
+        .saturating_add(b.trait_abs().unwrap_or(FixedPoint::<I, P>::MAX));
     // should not saturate as tolerance is in [0, 1)
     Ok(magnitude.saturating_rmul(percentage, RoundMode::Ceil))
 }

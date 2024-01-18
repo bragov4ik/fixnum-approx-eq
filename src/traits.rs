@@ -1,27 +1,29 @@
-use fixnum::{ArithmeticError, FixedPoint};
+use fixnum::{ArithmeticError, FixedPoint, Precision};
 
 pub trait Abs: Sized {
-    fn abs(self) -> Result<Self, fixnum::ArithmeticError>;
+    fn trait_abs(self) -> Result<Self, fixnum::ArithmeticError>;
 }
 
 macro_rules! impl_abs {
     ($inner:ty) => {
-        impl<P> Abs for FixedPoint<$inner, P> {
-            fn abs(self) -> Result<Self, ArithmeticError> {
-                FixedPoint::<$inner, P>::abs(self)
+        impl<P> Abs for FixedPoint<$inner, P>
+        where
+            P: Precision,
+        {
+            fn trait_abs(self) -> Result<Self, ArithmeticError> {
+                self.abs()
             }
         }
     };
 }
 
-impl<P> Abs for FixedPoint<i16, P> {
-    fn abs(self) -> Result<Self, ArithmeticError> {
-        FixedPoint::<i16, P>::abs(self)
-    }
-}
-// impl_abs!(i16);
+#[cfg(feature = "i16")]
+impl_abs!(i16);
+#[cfg(feature = "i32")]
 impl_abs!(i32);
+#[cfg(feature = "i64")]
 impl_abs!(i64);
+#[cfg(feature = "i128")]
 impl_abs!(i128);
 
 #[cfg(test)]
@@ -32,9 +34,9 @@ mod tests {
 
     #[test]
     fn abs_works() {
-        let f = FixedPoint::<i16, U18>::from_decimal(-12, -2).unwrap();
+        let f = FixedPoint::<i128, U18>::from_decimal(-12, -2).unwrap();
         dbg!(&f);
-        let f_abs = <FixedPoint<i16, U18> as Abs>::abs(f).unwrap();
+        let f_abs = <FixedPoint<i128, U18> as Abs>::trait_abs(f).unwrap();
         dbg!(&f_abs);
     }
 }
