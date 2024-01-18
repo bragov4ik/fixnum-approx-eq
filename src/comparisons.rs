@@ -1,5 +1,5 @@
 use crate::traits::Abs;
-use fixnum::ops::{Bounded, CheckedAdd, CheckedMul, One, RoundMode, RoundingMul, Zero};
+use fixnum::ops::{Bounded, CheckedAdd, One, RoundMode, RoundingMul, Zero};
 use fixnum::{FixedPoint, Precision};
 use thiserror::Error;
 
@@ -133,9 +133,9 @@ where
 #[cfg(test)]
 mod test {
     use super::{are_approx_eq, are_approx_eq_abs, are_approx_eq_rel, ApproxEqError};
-    use fixnum::ops::{Bounded, Zero};
+    use fixnum::ops::{Bounded, CheckedSub, One, Zero};
     use fixnum::typenum::U18;
-    use fixnum::{fixnum, FixedPoint};
+    use fixnum::{fixnum_const, FixedPoint};
 
     type CustomPrecision = U18;
 
@@ -189,14 +189,18 @@ mod test {
                 number,
                 number,
                 FixedPoint::<i128, CustomPrecision>::ZERO,
-                FixedPoint::<i128, CustomPrecision>::from_bits(fixnum!(1) - 1)
+                FixedPoint::<i128, CustomPrecision>::ONE
+                    .csub(FixedPoint::<i128, CustomPrecision>::from_bits(1))
+                    .unwrap()
             )
             .unwrap());
             assert!(are_approx_eq(
                 number,
                 number,
                 FixedPoint::<i128, CustomPrecision>::MAX,
-                FixedPoint::<i128, CustomPrecision>::from_bits(fixnum!(1) - 1)
+                FixedPoint::<i128, CustomPrecision>::ONE
+                    .csub(FixedPoint::from_bits(1))
+                    .unwrap()
             )
             .unwrap());
         }
@@ -250,7 +254,9 @@ mod test {
             assert!(are_approx_eq_rel(
                 number,
                 number,
-                FixedPoint::<i128, CustomPrecision>::from_bits(fixnum!(1) - 1)
+                FixedPoint::<i128, CustomPrecision>::ONE
+                    .csub(FixedPoint::from_bits(1))
+                    .unwrap()
             )
             .unwrap());
         }
@@ -258,15 +264,20 @@ mod test {
 
     // abs tolerance is drawn as (<=.=>)
     // rel tolerance is drawn as ({#.#})
-    struct ApproxEqTestCase<F> {
-        left: F,
-        right: F,
-        absolute_tolerance: F,
-        relative_percentage: F,
+    struct ApproxEqTestCase {
+        left: FixedPoint<i128, CustomPrecision>,
+        right: FixedPoint<i128, CustomPrecision>,
+        absolute_tolerance: FixedPoint<i128, CustomPrecision>,
+        relative_percentage: FixedPoint<i128, CustomPrecision>,
     }
 
-    impl<F> ApproxEqTestCase<F> {
-        const fn new(left: F, right: F, absolute_tolerance: F, relative_percentage: F) -> Self {
+    impl ApproxEqTestCase {
+        const fn new(
+            left: FixedPoint<i128, CustomPrecision>,
+            right: FixedPoint<i128, CustomPrecision>,
+            absolute_tolerance: FixedPoint<i128, CustomPrecision>,
+            relative_percentage: FixedPoint<i128, CustomPrecision>,
+        ) -> Self {
             Self {
                 left,
                 right,
@@ -277,21 +288,31 @@ mod test {
     }
 
     // Test cases where the numbers are approx. equal only by absolute tolerance
-    const APPROX_EQ_ABS_MATCH_CASES: &[ApproxEqTestCase<FixedPoint<i128, CustomPrecision>>] = &[
+    const APPROX_EQ_ABS_MATCH_CASES: &[ApproxEqTestCase] = &[
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
         //           ^right    ^left
         // abs tolerance: +-5
         // rel tolerance: +-0.05
-        ApproxEqTestCase::new(fixnum!(5), fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            fixnum_const!(5, 18),
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
         // ^left     ^right
         // abs tolerance: +-5
         // rel tolerance: +-0.05
-        ApproxEqTestCase::new(-(fixnum!(5)), fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            fixnum_const!(-5, 18),
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
@@ -299,7 +320,14 @@ mod test {
         //            ^~left
         // abs tolerance: +-5
         // rel tolerance: +-0.05
-        ApproxEqTestCase::new(fixnum!(0.05) + 1, fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::from_bits(
+                fixnum::_priv::parse_fixed(stringify!(0.05), fixnum::_priv::pow10(18)) + 1,
+            ),
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
@@ -307,14 +335,26 @@ mod test {
         //          ^~left
         // abs tolerance: +-5
         // rel tolerance: +-0.05
-        ApproxEqTestCase::new(-(fixnum!(0.05)) + 1, fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::from_bits(
+                -fixnum::_priv::parse_fixed(stringify!(0.05), fixnum::_priv::pow10(18)) - 1,
+            ),
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         // 47        52        57
         // |         |         |
         // <=========.=========>
         // ^left     ^right
         // abs tolerance: +-5
         // rel tolerance: +-4.95
-        ApproxEqTestCase::new(fixnum!(47), fixnum!(52), fixnum!(5), fixnum!(0.05)),
+        ApproxEqTestCase::new(
+            fixnum_const!(47, 18),
+            fixnum_const!(52, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.05, 18),
+        ),
         // closer to rel tolerance:
         // 47.02        51.98
         // |            |
@@ -322,24 +362,23 @@ mod test {
         // ^left        ^right
         // abs tolerance: +-5
         // rel tolerance: +-4.95
-        ApproxEqTestCase::new(fixnum!(47.02), fixnum!(51.98), fixnum!(5), fixnum!(0.05)),
+        ApproxEqTestCase::new(
+            fixnum_const!(47.02, 18),
+            fixnum_const!(51.98, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.05, 18),
+        ),
     ];
 
     #[test]
     fn should_approx_eq_match_abs_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage,
         } in APPROX_EQ_ABS_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 are_approx_eq(left, right, absolute_tolerance, relative_percentage).unwrap(),
                 "Expected {} = {} with absolute tolerance {} and relative tolerance (%) {}, but got '!='",
@@ -355,17 +394,13 @@ mod test {
 
     #[test]
     fn should_approx_eq_abs_match_abs_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage: _,
         } in APPROX_EQ_ABS_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
             assert!(
                 are_approx_eq_abs(left, right, absolute_tolerance).unwrap(),
                 "Expected {} = {} with absolute tolerance {}, but got '!='",
@@ -387,17 +422,13 @@ mod test {
 
     #[test]
     fn should_approx_eq_rel_not_match_abs_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance: _,
             relative_percentage,
         } in APPROX_EQ_ABS_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 !are_approx_eq_rel(left, right, relative_percentage).unwrap(),
                 "Expected {} != {} with relative tolerance (%) {}, but got '='",
@@ -413,7 +444,7 @@ mod test {
         }
     }
     // Test cases where the numbers are approx. equal only by relative tolerance
-    const APPROX_EQ_REL_MATCH_CASES: &[ApproxEqTestCase<FixedPoint<i128, CustomPrecision>>] = &[
+    const APPROX_EQ_REL_MATCH_CASES: &[ApproxEqTestCase] = &[
         // 0       5 6
         // |       | |
         //       {#.#}
@@ -421,7 +452,12 @@ mod test {
         //           ^left
         // abs tolerance: 0
         // rel tolerance: +-1.1
-        ApproxEqTestCase::new(fixnum!(6), fixnum!(5), fixnum!(0), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(6, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9   11
         //   |   |
         // ##.###}
@@ -429,7 +465,12 @@ mod test {
         //       ^left
         // abs tolerance: 0
         // rel tolerance: +-2
-        ApproxEqTestCase::new(fixnum!(11), fixnum!(9), fixnum!(0), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(11, 18),
+            fixnum_const!(9, 18),
+            fixnum_const!(0, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9   11
         //   |   |
         // ##.###}
@@ -437,7 +478,12 @@ mod test {
         //       ^left
         // abs tolerance: +-1.9999
         // rel tolerance: +-2
-        ApproxEqTestCase::new(fixnum!(11), fixnum!(9), fixnum!(1.9999), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(11, 18),
+            fixnum_const!(9, 18),
+            fixnum_const!(1.9999, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9   10.1
         //   |   |
         // ##.###}
@@ -445,24 +491,23 @@ mod test {
         //       ^right
         // abs tolerance: +-1
         // rel tolerance: +-1.91
-        ApproxEqTestCase::new(fixnum!(9), fixnum!(10.1), fixnum!(1), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(9, 18),
+            fixnum_const!(10.1, 18),
+            fixnum_const!(1, 18),
+            fixnum_const!(0.1, 18),
+        ),
     ];
 
     #[test]
     fn should_approx_eq_match_rel_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage,
         } in APPROX_EQ_REL_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 are_approx_eq(left, right, absolute_tolerance, relative_percentage).unwrap(),
                 "Expected {} = {} with absolute tolerance {} and relative tolerance (%) {}, but got '!='",
@@ -478,17 +523,13 @@ mod test {
 
     #[test]
     fn should_approx_eq_abs_not_match_rel_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage: _,
         } in APPROX_EQ_REL_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
             assert!(
                 !are_approx_eq_abs(left, right, absolute_tolerance).unwrap(),
                 "Expected {} != {} with absolute tolerance {}, but got '='",
@@ -510,17 +551,13 @@ mod test {
 
     #[test]
     fn should_approx_eq_rel_match_rel_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance: _,
             relative_percentage,
         } in APPROX_EQ_REL_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 are_approx_eq_rel(left, right, relative_percentage).unwrap(),
                 "Expected {} = {} with relative tolerance (%) {}, but got '!='",
@@ -537,7 +574,7 @@ mod test {
     }
 
     // Test cases where the numbers are not approx. equal
-    const APPROX_EQ_BOTH_MATCH_CASES: &[ApproxEqTestCase<FixedPoint<i128, CustomPrecision>>] = &[
+    const APPROX_EQ_BOTH_MATCH_CASES: &[ApproxEqTestCase] = &[
         // 0       5 6
         // |       | |
         //       {#.#}
@@ -545,7 +582,12 @@ mod test {
         //           ^left
         // abs tolerance: +-1.1
         // rel tolerance: +-1.1
-        ApproxEqTestCase::new(fixnum!(6), fixnum!(5), fixnum!(1.1), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(6, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(1.1, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9   11
         //   |   |
         // ##.###}
@@ -553,7 +595,12 @@ mod test {
         //       ^right
         // abs tolerance: +-2
         // rel tolerance: +-2
-        ApproxEqTestCase::new(fixnum!(9), fixnum!(11), fixnum!(2), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(9, 18),
+            fixnum_const!(11, 18),
+            fixnum_const!(2, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9      11
         //   |      |
         // ##.###}
@@ -561,7 +608,14 @@ mod test {
         //   ^left
         // abs tolerance: +-2
         // rel tolerance: +-2
-        ApproxEqTestCase::new(fixnum!(9), fixnum!(9) + 1, fixnum!(2), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(9, 18),
+            FixedPoint::<i128, CustomPrecision>::from_bits(
+                fixnum::_priv::parse_fixed(stringify!(9), fixnum::_priv::pow10(18)) + 1,
+            ),
+            fixnum_const!(2, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9   10.1
         //   |   |
         // ##.###}
@@ -569,24 +623,23 @@ mod test {
         //       ^right
         // abs tolerance: +-1.11
         // rel tolerance: +-1.91
-        ApproxEqTestCase::new(fixnum!(9), fixnum!(10.1), fixnum!(1.11), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(9, 18),
+            fixnum_const!(10.1, 18),
+            fixnum_const!(1.11, 18),
+            fixnum_const!(0.1, 18),
+        ),
     ];
 
     #[test]
     fn should_approx_eq_match_both_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage,
         } in APPROX_EQ_BOTH_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 are_approx_eq(left, right, absolute_tolerance, relative_percentage).unwrap(),
                 "Expected {} = {} with absolute tolerance {} and relative tolerance (%) {}, but got '!='",
@@ -602,17 +655,13 @@ mod test {
 
     #[test]
     fn should_approx_eq_abs_match_both_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage: _,
         } in APPROX_EQ_BOTH_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
             assert!(
                 are_approx_eq_abs(left, right, absolute_tolerance).unwrap(),
                 "Expected {} = {} with absolute tolerance {}, but got '!='",
@@ -634,17 +683,13 @@ mod test {
 
     #[test]
     fn should_approx_eq_rel_match_both_tolerance() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance: _,
             relative_percentage,
         } in APPROX_EQ_BOTH_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 are_approx_eq_rel(left, right, relative_percentage).unwrap(),
                 "Expected {} = {} with relative tolerance (%) {}, but got '!='",
@@ -661,49 +706,95 @@ mod test {
     }
 
     // Test cases where the numbers are not approx. equal
-    const APPROX_EQ_NOT_MATCH_CASES: &[ApproxEqTestCase<FixedPoint<i128, CustomPrecision>>] = &[
+    const APPROX_EQ_NOT_MATCH_CASES: &[ApproxEqTestCase] = &[
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
         //           ^right     ^left
         // abs tolerance: +-5
         // rel tolerance: +-0.05
-        ApproxEqTestCase::new(fixnum!(5) + 1, fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::from_bits(
+                fixnum::_priv::parse_fixed(stringify!(5), fixnum::_priv::pow10(18)) + 1,
+            ),
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         //  -5        0 1       5
         //  |         | |       |
         //  <=========.=========>
         // ^left      ^right
         // abs tolerance: +-5
         // rel tolerance: +-0.05
-        ApproxEqTestCase::new(-(fixnum!(5)) - 1, fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::from_bits(
+                -fixnum::_priv::parse_fixed(stringify!(5), fixnum::_priv::pow10(18)) - 1,
+            ),
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
         //           ^right
         // abs tolerance: +-5
         // rel tolerance: +-(0.01*FixedInner::MAX)
-        ApproxEqTestCase::new(FixedInner::MAX, fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::MAX,
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         // -5        0 1       5
         // |         | |       |
         // <=========.=========>
         //           ^right
         // abs tolerance: +-5
         // rel tolerance: +-(0.01*FixedInner::MIN.abs())
-        ApproxEqTestCase::new(FixedInner::MIN, fixnum!(0), fixnum!(5), fixnum!(0.01)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::MIN,
+            fixnum_const!(0, 18),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.01, 18),
+        ),
         //  47        52        57
         //  |         |         |
         //   <=========.=========>
         // ^left       ^right
         // abs tolerance: +-5
         // rel tolerance: +-4.95
-        ApproxEqTestCase::new(fixnum!(47) - 1, fixnum!(52) + 1, fixnum!(5), fixnum!(0.05)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::from_bits(fixnum::_priv::parse_fixed(
+                stringify!(47),
+                fixnum::_priv::pow10(18) - 1,
+            )),
+            FixedPoint::<i128, CustomPrecision>::from_bits(fixnum::_priv::parse_fixed(
+                stringify!(52),
+                fixnum::_priv::pow10(18) + 1,
+            )),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.05, 18),
+        ),
         //  47        53        57
         //  |         |         |
         //   <=========.=========>
         // ^left       ^right
         // abs tolerance: +-5
         // rel tolerance: +-5
-        ApproxEqTestCase::new(fixnum!(47) - 1, fixnum!(53) + 1, fixnum!(5), fixnum!(0.05)),
+        ApproxEqTestCase::new(
+            FixedPoint::<i128, CustomPrecision>::from_bits(fixnum::_priv::parse_fixed(
+                stringify!(47),
+                fixnum::_priv::pow10(18) - 1,
+            )),
+            FixedPoint::<i128, CustomPrecision>::from_bits(fixnum::_priv::parse_fixed(
+                stringify!(53),
+                fixnum::_priv::pow10(18) + 1,
+            )),
+            fixnum_const!(5, 18),
+            fixnum_const!(0.05, 18),
+        ),
         //   9   11
         //   |   |
         // ##.###}
@@ -711,7 +802,15 @@ mod test {
         //        ^right
         // abs tolerance: 0
         // rel tolerance: +-2
-        ApproxEqTestCase::new(fixnum!(9), fixnum!(11) + 10, fixnum!(0), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(9, 18),
+            FixedPoint::<i128, CustomPrecision>::from_bits(fixnum::_priv::parse_fixed(
+                stringify!(11),
+                fixnum::_priv::pow10(18) + 10,
+            )),
+            fixnum_const!(0, 18),
+            fixnum_const!(0.1, 18),
+        ),
         //   9   11
         //   |   |
         // ##.###}
@@ -719,24 +818,26 @@ mod test {
         //        ^right
         // abs tolerance: +-1.9999
         // rel tolerance: +-2
-        ApproxEqTestCase::new(fixnum!(9), fixnum!(11) + 10, fixnum!(1.9999), fixnum!(0.1)),
+        ApproxEqTestCase::new(
+            fixnum_const!(9, 18),
+            FixedPoint::<i128, CustomPrecision>::from_bits(fixnum::_priv::parse_fixed(
+                stringify!(11),
+                fixnum::_priv::pow10(18) + 10,
+            )),
+            fixnum_const!(1.9999, 18),
+            fixnum_const!(0.1, 18),
+        ),
     ];
 
     #[test]
     fn should_approx_eq_not_match() {
-        for ApproxEqTestCase {
+        for &ApproxEqTestCase {
             left,
             right,
             absolute_tolerance,
             relative_percentage,
         } in APPROX_EQ_NOT_MATCH_CASES
         {
-            let left = FixedPoint::<i128, CustomPrecision>::from_bits(*left);
-            let right = FixedPoint::<i128, CustomPrecision>::from_bits(*right);
-            let absolute_tolerance =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*absolute_tolerance);
-            let relative_percentage =
-                FixedPoint::<i128, CustomPrecision>::from_bits(*relative_percentage);
             assert!(
                 !are_approx_eq(left, right, absolute_tolerance, relative_percentage).unwrap(),
                 "Expected {} != {} with absolute tolerance {} and relative tolerance (%) {}, but got '=='",
@@ -762,7 +863,9 @@ mod test {
             ),
             Err(ApproxEqError::IncorrectRelativePercentage(percentage))
         );
-        let percentage = FixedPoint::<i128, CustomPrecision>::from_bits(fixnum!(1) + 1);
+        let percentage = FixedPoint::<i128, CustomPrecision>::ONE
+            .csub(FixedPoint::from_bits(1))
+            .unwrap();
         assert_eq!(
             are_approx_eq(
                 FixedPoint::<i128, CustomPrecision>::ZERO,
