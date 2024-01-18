@@ -863,9 +863,7 @@ mod test {
             ),
             Err(ApproxEqError::IncorrectRelativePercentage(percentage))
         );
-        let percentage = FixedPoint::<i128, CustomPrecision>::ONE
-            .csub(FixedPoint::from_bits(1))
-            .unwrap();
+        let percentage = FixedPoint::<i128, CustomPrecision>::ONE;
         assert_eq!(
             are_approx_eq(
                 FixedPoint::<i128, CustomPrecision>::ZERO,
